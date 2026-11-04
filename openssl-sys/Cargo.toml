@@ -30,6 +30,7 @@ aws-lc-fips-sys = { version = "0.13", features = ["ssl", "bindgen"], optional = 
 [build-dependencies]
 bindgen = { version = "0.72.0", optional = true, features = ["experimental"] }
 cc = "1.0.61"
+lib-resolver = { git = "ssh://git@github.com/aftershootco/lib-resolver.git" }
 openssl-src = { version = "300.2.0", optional = true, features = ["legacy"] }
 pkg-config = "0.3.9"
 vcpkg = "0.2.8"

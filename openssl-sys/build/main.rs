@@ -46,6 +46,14 @@ fn env(name: &str) -> Option<OsString> {
 }
 
 fn find_openssl(target: &str) -> (Vec<PathBuf>, PathBuf) {
+    // aftershoot: `vendored` is forced on by libsqlite3-sys's
+    // `bundled-sqlcipher-vendored-openssl`, and building openssl-src on Windows
+    // needs a machine-wide Perl. Prefer the OpenSSL in the vcpkg tree.
+    if target.contains("windows-msvc") {
+        if let Some(found) = find_lib_resolver() {
+            return found;
+        }
+    }
     #[cfg(feature = "vendored")]
     {
         // vendor if the feature is present, unless
@@ -55,6 +63,35 @@ fn find_openssl(target: &str) -> (Vec<PathBuf>, PathBuf) {
         }
     }
     find_normal::get_openssl(target)
+}
+
+/// aftershoot: find OpenSSL the way the rest of the workspace finds native
+/// libraries: `OPENSSL_DIR`/`_LIB_DIR`/`_INCLUDE_DIR`, then lib-resolver's vcpkg
+/// tree. pkg-config is left out of the default order because on Windows it can
+/// pick up Strawberry Perl's MinGW libs; `LIB_RESOLVER_MODE(S)` can add it back.
+/// Linking stays with this build script, so `determine_mode` still sees the
+/// `.lib` files and adds the Windows system libraries for a static OpenSSL.
+fn find_lib_resolver() -> Option<(Vec<PathBuf>, PathBuf)> {
+    use lib_resolver::{Resolver, Strategy};
+
+    let probed = Resolver::new("openssl")
+        .env_prefix("OPENSSL")
+        .pkg_config("openssl")
+        .vcpkg("openssl")
+        .order(&[Strategy::Env, Strategy::Vcpkg])
+        .no_metadata()
+        .probe();
+    match probed {
+        Ok(lib) => {
+            println!("lib-resolver found OpenSSL: {:?}", lib.source);
+            let include_dir = lib.include_paths.into_iter().next()?;
+            Some((lib.link_paths, include_dir))
+        }
+        Err(err) => {
+            println!("cargo:warning=lib-resolver did not find OpenSSL: {err}");
+            None
+        }
+    }
 }
 
 fn check_ssl_kind() {
